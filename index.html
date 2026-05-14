@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8">
   <title>縫製仕様書 検索</title>
-  <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -22,16 +21,6 @@
       margin-bottom: 6px;
     }
     .subtitle { color: #888; font-size: 13px; margin-bottom: 24px; }
-    .login-bar {
-      background: white;
-      border-radius: 8px;
-      padding: 16px 20px;
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      margin-bottom: 20px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-    }
     .search-bar {
       background: white;
       border-radius: 8px;
@@ -58,13 +47,9 @@
       cursor: pointer;
       font-family: 'Meiryo', sans-serif;
     }
-    #loginBtn { background: #1a3a5c; color: white; }
-    #loginBtn:hover { background: #142e4a; }
-    #loginBtn.done { background: #27ae60; }
     #searchBtn { background: #1a3a5c; color: white; min-width: 80px; }
     #searchBtn:hover { background: #142e4a; }
-    #searchBtn:disabled { background: #aaa; cursor: not-allowed; }
-    #loginStatus { color: #555; font-size: 13px; }
+    .cache-info { font-size: 12px; color: #aaa; text-align: right; margin-bottom: 8px; }
     .result-header { color: #555; font-size: 13px; margin-bottom: 10px; }
     .item {
       background: white;
@@ -82,162 +67,43 @@
     .loading { text-align: center; padding: 40px; color: #888; font-size: 15px; }
     .empty { text-align: center; padding: 40px; color: #aaa; }
     .error { color: #c0392b; background: #fdf0ef; border-radius: 6px; padding: 12px 16px; }
-    .cache-info { font-size: 12px; color: #aaa; text-align: right; margin-bottom: 8px; }
-    #refreshBtn {
-      background: none;
-      border: 1px solid #ccc;
-      color: #888;
-      font-size: 12px;
-      padding: 4px 10px;
-      border-radius: 4px;
-      cursor: pointer;
-      margin-left: 8px;
-    }
-    #refreshBtn:hover { background: #f0f0f0; }
   </style>
 </head>
 <body>
 
   <h1>📄 縫製仕様書 検索</h1>
-  <p class="subtitle">ファイル名（品番）でSharePoint上のPDFを検索します</p>
-
-  <div class="login-bar">
-    <button id="loginBtn" onclick="login()">🔑 Microsoftログイン</button>
-    <span id="loginStatus">ログインしてから検索できます</span>
-  </div>
+  <p class="subtitle">品番でPDFを検索できます（毎朝自動更新）</p>
 
   <div class="search-bar">
     <input type="text" id="query" placeholder="品番を入力（例：0024）" onkeydown="if(event.key==='Enter') search()" />
-    <button id="searchBtn" onclick="search()" disabled>検索</button>
+    <button id="searchBtn" onclick="search()">検索</button>
   </div>
 
-  <div id="cacheInfo" style="display:none" class="cache-info">
-    <span id="cacheText"></span>
-    <button id="refreshBtn" onclick="refreshFiles()">🔄 再読み込み</button>
-  </div>
-
-  <div id="results"></div>
+  <div id="cacheInfo" class="cache-info"></div>
+  <div id="results"><div class="loading">📂 ファイル一覧を読み込み中...</div></div>
 
   <script>
-    const CLIENT_ID   = "b0d25d3d-bfd6-48f1-9bb4-f0487a0a732c";
-    const TENANT_ID   = "5a54ba64-549f-4481-acf7-fe5ab0840f43";
-    const SITE_HOST   = "sowa.sharepoint.com";
-    const SITE_PATH   = "/sites/SOWANAS";
-    const FOLDER_PATH = "";
-
-    const msalConfig = {
-      auth: {
-        clientId: CLIENT_ID,
-        authority: `https://login.microsoftonline.com/${TENANT_ID}`,
-        redirectUri: window.location.href.split('?')[0].split('#')[0]
-      },
-      cache: { cacheLocation: "sessionStorage" }
-    };
-
-    const msalInstance = new msal.PublicClientApplication(msalConfig);
-    let accessToken = null;
     let allFiles = [];
 
-    async function login() {
-      try {
-        const result = await msalInstance.loginPopup({
-          scopes: ["Files.Read.All", "Sites.Read.All", "User.Read"]
-        });
-        accessToken = result.accessToken;
-        const name = result.account.name || result.account.username;
-        document.getElementById("loginStatus").textContent = `✅ ${name} でログイン済み`;
-        document.getElementById("loginBtn").textContent = "✅ ログイン済み";
-        document.getElementById("loginBtn").classList.add("done");
-        document.getElementById("loginBtn").disabled = true;
-        document.getElementById("searchBtn").disabled = false;
+    // files.jsonを読み込む
+    fetch('files.json?v=' + Date.now())
+      .then(r => r.json())
+      .then(data => {
+        allFiles = data;
+        document.getElementById("cacheInfo").textContent = `${allFiles.length}件のPDFが検索可能です`;
+        document.getElementById("results").innerHTML = `<div class="empty">検索ボックスに品番を入力してください</div>`;
         document.getElementById("query").focus();
-        await loadAllFiles();
-      } catch (e) {
-        document.getElementById("loginStatus").textContent = "❌ ログイン失敗: " + e.message;
-      }
-    }
-
-    async function graphGet(url) {
-      const res = await fetch(url, {
-        headers: { "Authorization": `Bearer ${accessToken}` }
+      })
+      .catch(e => {
+        document.getElementById("results").innerHTML = `<div class="error">⚠️ ファイル一覧の読み込みに失敗しました: ${e.message}</div>`;
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error?.message || `HTTP ${res.status}`);
-      }
-      return res.json();
-    }
-
-    async function loadAllFiles() {
-      const resultsDiv = document.getElementById("results");
-      resultsDiv.innerHTML = `<div class="loading">📂 ファイル一覧を読み込み中...</div>`;
-
-      try {
-        // サイトID取得
-        const siteData = await graphGet(
-          `https://graph.microsoft.com/v1.0/sites/${SITE_HOST}:${SITE_PATH}`
-        );
-        const siteId = siteData.id;
-
-        // ドライブ一覧取得
-        const drivesData = await graphGet(
-          `https://graph.microsoft.com/v1.0/sites/${siteId}/drives`
-        );
-
-        // "sowanas"を含むドライブを探す
-        const drive = drivesData.value.find(d => d.name === "Documents") || drivesData.value[0];
-        const driveId = drive.id;
-
-        // フォルダ内ファイルを再帰取得
-        allFiles = [];
-        await fetchFilesRecursive(driveId, "sowanas/生産部/01_縫製仕様書");
-        const now = new Date().toLocaleTimeString("ja-JP");
-        document.getElementById("cacheInfo").style.display = "block";
-        document.getElementById("cacheText").textContent = `${allFiles.length}件読み込み済み（${now}時点）`;
-        resultsDiv.innerHTML = `<div class="empty">検索ボックスに品番を入力してください</div>`;
-
-      } catch (e) {
-        resultsDiv.innerHTML = `<div class="error">⚠️ ファイル一覧の取得に失敗しました: ${e.message}<br><br>フォルダパスが正しくない可能性があります。</div>`;
-      }
-    }
-
-    async function fetchFilesRecursive(driveId, folderPath) {
-      let url = folderPath
-  ? `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${encodeURIComponent(folderPath).replace(/%2F/g,'/')}:/children?$top=999&$select=name,webUrl,lastModifiedDateTime,folder,file`
-  : `https://graph.microsoft.com/v1.0/drives/${driveId}/root/children?$top=10&$select=name,webUrl,lastModifiedDateTime,folder,file`;
-
-      while (url) {
-        const data = await graphGet(url);
-        for (const item of data.value) {
-          if (item.file && item.name.toLowerCase().endsWith(".pdf")) {
-            allFiles.push({
-              name: item.name,
-              url: item.webUrl,
-              modified: item.lastModifiedDateTime
-            });
-          } else if (item.folder) {
-            await fetchFilesRecursive(driveId, `${folderPath}/${item.name}`);
-          }
-        }
-        url = data["@odata.nextLink"] || null;
-      }
-    }
-
-    async function refreshFiles() {
-      allFiles = [];
-      await loadAllFiles();
-    }
 
     function search() {
       const query = document.getElementById("query").value.trim().toLowerCase();
       const resultsDiv = document.getElementById("results");
 
-      if (!accessToken) { alert("先にログインしてください"); return; }
       if (!query) { alert("品番を入力してください"); return; }
-      if (allFiles.length === 0) {
-        alert("ファイル一覧を読み込み中です。しばらくお待ちください");
-        return;
-      }
+      if (allFiles.length === 0) { alert("読み込み中です。しばらくお待ちください"); return; }
 
       const matched = allFiles.filter(f => f.name.toLowerCase().includes(query));
 
