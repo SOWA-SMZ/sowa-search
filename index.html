@@ -123,7 +123,7 @@
     const TENANT_ID   = "5a54ba64-549f-4481-acf7-fe5ab0840f43";
     const SITE_HOST   = "sowa.sharepoint.com";
     const SITE_PATH   = "/sites/SOWANAS";
-    const FOLDER_PATH = "sowanas/生産部/01_縫製仕様書";
+    const FOLDER_PATH = "";
 
     const msalConfig = {
       auth: {
@@ -192,7 +192,7 @@
 
         // フォルダ内ファイルを再帰取得
         allFiles = [];
-        await fetchFilesRecursive(driveId, "生産部/01_縫製仕様書");
+        await fetchFilesRecursive(driveId, "");
 
         const now = new Date().toLocaleTimeString("ja-JP");
         document.getElementById("cacheInfo").style.display = "block";
@@ -205,7 +205,9 @@
     }
 
     async function fetchFilesRecursive(driveId, folderPath) {
-      let url = `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${encodeURIComponent(folderPath).replace(/%2F/g,'/')}:/children?$top=999&$select=name,webUrl,lastModifiedDateTime,folder,file`;
+      let url = folderPath
+  ? `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${encodeURIComponent(folderPath).replace(/%2F/g,'/')}:/children?$top=10&$select=name,webUrl,lastModifiedDateTime,folder,file`
+  : `https://graph.microsoft.com/v1.0/drives/${driveId}/root/children?$top=10&$select=name,webUrl,lastModifiedDateTime,folder,file`;
 
       while (url) {
         const data = await graphGet(url);
