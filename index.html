@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>縫製仕様書 検索</title>
+  <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Meiryo', sans-serif;
+      max-width: 860px;
+      margin: 40px auto;
+      padding: 0 24px;
+      background: #f5f6fa;
+      color: #222;
+    }
+    h1 {
+      color: #1a3a5c;
+      font-size: 22px;
+      border-left: 5px solid #1a3a5c;
+      padding-left: 12px;
+      margin-bottom: 6px;
+    }
+    .subtitle { color: #888; font-size: 13px; margin-bottom: 24px; }
+    .login-bar {
+      background: white;
+      border-radius: 8px;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .search-bar {
+      background: white;
+      border-radius: 8px;
+      padding: 16px 20px;
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    input[type="text"] {
+      flex: 1;
+      padding: 10px 14px;
+      font-size: 15px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-family: 'Meiryo', sans-serif;
+    }
+    input[type="text"]:focus { outline: none; border-color: #1a3a5c; }
+    button {
+      padding: 10px 22px;
+      font-size: 14px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: 'Meiryo', sans-serif;
+    }
+    #loginBtn {
+      background: #1a3a5c;
+      color: white;
+    }
+    #loginBtn:hover { background: #142e4a; }
+    #loginBtn.done { background: #27ae60; }
+    #searchBtn {
+      background: #1a3a5c;
+      color: white;
+      min-width: 80px;
+    }
+    #searchBtn:hover { background: #142e4a; }
+    #searchBtn:disabled { background: #aaa; cursor: not-allowed; }
+    #loginStatus { color: #555; font-size: 13px; }
+    #results { }
+    .result-header { color: #555; font-size: 13px; margin-bottom: 10px; }
+    .item {
+      background: white;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+      transition: box-shadow 0.15s;
+    }
+    .item:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.12); }
+    .item-name { font-size: 15px; font-weight: bold; }
+    .item-name a { color: #1a3a5c; text-decoration: none; }
+    .item-name a:hover { text-decoration: underline; }
+    .item-meta { color: #aaa; font-size: 12px; margin-top: 4px; }
+    .item-snippet { color: #555; font-size: 13px; margin-top: 8px; line-height: 1.6; border-top: 1px solid #f0f0f0; padding-top: 8px; }
+    .loading { text-align: center; padding: 40px; color: #888; font-size: 15px; }
+    .empty { text-align: center; padding: 40px; color: #aaa; }
+    .error { color: #c0392b; background: #fdf0ef; border-radius: 6px; padding: 12px 16px; }
+  </style>
+</head>
+<body>
+
+  <h1>📄 縫製仕様書 検索</h1>
+  <p class="subtitle">SharePoint上の縫製仕様書PDFをキーワードで検索できます</p>
+
+  <div class="login-bar">
+    <button id="loginBtn" onclick="login()">🔑 Microsoftログイン</button>
+    <span id="loginStatus">ログインしてから検索できます</span>
+  </div>
+
+  <div class="search-bar">
+    <input type="text" id="query" placeholder="品番・品名・素材・工程名など..." onkeydown="if(event.key==='Enter') search()" />
+    <button id="searchBtn" onclick="search()" disabled>検索</button>
+  </div>
+
+  <div id="results"></div>
+
+  <script>
+    const CLIENT_ID = "b0d25d3d-bfd6-48f1-9bb4-f0487a0a732c";
+    const TENANT_ID = "5a54ba64-549f-4481-acf7-fe5ab0840f43";
+    const SHAREPOINT_HOST = "sowa.sharepoint.com";
+    const SITE_PATH = "/sites/SOWANAS";
+
+    const msalConfig = {
+      auth: {
+        clientId: CLIENT_ID,
+        authority: `https://login.microsoftonline.com/${TENANT_ID}`,
+        redirectUri: window.location.href.split('?')[0].split('#')[0]
+      },
+      cache: { cacheLocation: "sessionStorage" }
+    };
+
+    const msalInstance = new msal.PublicClientApplication(msalConfig);
+    let accessToken = null;
+
+    async function login() {
+      try {
+        const result = await msalInstance.loginPopup({
+          scopes: ["Files.Read.All", "Sites.Read.All", "User.Read"]
+        });
+        accessToken = result.accessToken;
+        const name = result.account.name || result.account.username;
+        document.getElementById("loginStatus").textContent = `✅ ${name} でログイン済み`;
+        document.getElementById("loginBtn").textContent = "✅ ログイン済み";
+        document.getElementById("loginBtn").classList.add("done");
+        document.getElementById("loginBtn").disabled = true;
+        document.getElementById("searchBtn").disabled = false;
+        document.getElementById("query").focus();
+      } catch (e) {
+        document.getElementById("loginStatus").textContent = "❌ ログイン失敗: " + e.message;
+      }
+    }
+
+    async function search() {
+      const query = document.getElementById("query").value.trim();
+      const resultsDiv = document.getElementById("results");
+
+      if (!accessToken) { alert("先にログインしてください"); return; }
+      if (!query) { alert("検索ワードを入力してください"); return; }
+
+      resultsDiv.innerHTML = `<div class="loading">🔍 「${query}」を検索中...</div>`;
+
+      try {
+        const searchBody = {
+          requests: [{
+            entityTypes: ["driveItem"],
+            query: {
+              queryString: `${query} path:"${SHAREPOINT_HOST}${SITE_PATH}"`
+            },
+            fields: ["name", "webUrl", "lastModifiedDateTime", "summary", "size"],
+            size: 30
+          }]
+        };
+
+        const res = await fetch("https://graph.microsoft.com/v1.0/search/query", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(searchBody)
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error?.message || `HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        const hits = data?.value?.[0]?.hitsContainers?.[0]?.hits || [];
+        const pdfHits = hits.filter(h => (h.resource?.name || "").toLowerCase().endsWith(".pdf"));
+
+        if (hits.length === 0) {
+          resultsDiv.innerHTML = `<div class="empty">「${query}」に一致するファイルは見つかりませんでした</div>`;
+          return;
+        }
+        if (pdfHits.length === 0) {
+          resultsDiv.innerHTML = `<div class="empty">PDFファイルは見つかりませんでした（${hits.length}件のExcel等は除外）</div>`;
+          return;
+        }
+
+        let html = `<p class="result-header">📁 ${pdfHits.length}件 見つかりました</p>`;
+        for (const hit of pdfHits) {
+          const name = hit.resource?.name || "（不明）";
+          const url = hit.resource?.webUrl || "#";
+          const modified = hit.resource?.lastModifiedDateTime
+            ? new Date(hit.resource.lastModifiedDateTime).toLocaleDateString("ja-JP")
+            : "";
+          const summary = hit.summary || "";
+
+          html += `
+            <div class="item">
+              <div class="item-name"><a href="${url}" target="_blank">📄 ${name}</a></div>
+              <div class="item-meta">更新日: ${modified}</div>
+              ${summary ? `<div class="item-snippet">${summary}</div>` : ""}
+            </div>`;
+        }
+        resultsDiv.innerHTML = html;
+
+      } catch (e) {
+        resultsDiv.innerHTML = `<div class="error">⚠️ エラー: ${e.message}</div>`;
+      }
+    }
+  </script>
+</body>
+</html>
