@@ -203,7 +203,7 @@
 
     async function fetchFilesRecursive(driveId, folderPath) {
       let url = folderPath
-  ? `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${encodeURIComponent(folderPath).replace(/%2F/g,'/')}:/children?$top=10&$select=name,webUrl,lastModifiedDateTime,folder,file`
+  ? `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${encodeURIComponent(folderPath).replace(/%2F/g,'/')}:/children?$top=999&$select=name,webUrl,lastModifiedDateTime,folder,file`
   : `https://graph.microsoft.com/v1.0/drives/${driveId}/root/children?$top=10&$select=name,webUrl,lastModifiedDateTime,folder,file`;
 
       while (url) {
