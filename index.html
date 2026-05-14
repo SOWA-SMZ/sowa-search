@@ -190,7 +190,7 @@
 
         // フォルダ内ファイルを再帰取得
         allFiles = [];
-        await fetchFilesRecursive(driveId, "生産部/01_縫製仕様書");
+        await fetchFilesRecursive(driveId, "sowanas/生産部/01_縫製仕様書");
 
         const now = new Date().toLocaleTimeString("ja-JP");
         document.getElementById("cacheInfo").style.display = "block";
