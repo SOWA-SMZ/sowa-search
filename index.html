@@ -190,8 +190,7 @@
 
         // フォルダ内ファイルを再帰取得
         allFiles = [];
-        const rootData = await graphGet(`https://graph.microsoft.com/v1.0/drives/${driveId}/root:/sowanas/生産部:/children?$select=name,folder`);
-throw new Error("生産部内: " + rootData.value.map(i => i.name).join(", "));
+        await fetchFilesRecursive(driveId, "sowanas/生産部/01_縫製仕様書");
         const now = new Date().toLocaleTimeString("ja-JP");
         document.getElementById("cacheInfo").style.display = "block";
         document.getElementById("cacheText").textContent = `${allFiles.length}件読み込み済み（${now}時点）`;
