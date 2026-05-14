@@ -185,10 +185,8 @@
         );
 
         // "sowanas"を含むドライブを探す
-        const drive = drivesData.value.find(d =>
-          d.name.toLowerCase().includes("sowanas")
-        ) || drivesData.value[0];
-        const driveId = drive.id;
+        const driveNames = drivesData.value.map(d => d.name).join(", ");
+        throw new Error("ドライブ一覧: " + driveNames);
 
         // フォルダ内ファイルを再帰取得
         allFiles = [];
